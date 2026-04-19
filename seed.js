@@ -60,8 +60,8 @@ const products = [
 ];
 
 const defaultContent = [
-  { key: 'announce', value: 'Free delivery on orders over £25 · 100% Natural · Zero Preservatives' },
-  { key: 'hero_eyebrow', value: 'Premium Banana Chips · Preston, UK' },
+  { key: 'announce', value: 'Free delivery on orders over £25 ·  · Zero Preservatives' },
+  { key: 'hero_eyebrow', value: 'Premium Banana Chips' },
   { key: 'hero_title', value: 'CRUNZ' },
   { key: 'hero_sub', value: 'Zero preservatives. Four bold flavours. The ultimate crunch in every bite.' },
   { key: 'hero_cta', value: 'Shop Now' },

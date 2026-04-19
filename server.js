@@ -18,8 +18,17 @@ if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 connectDB();
 
 // Middleware
+const allowedOrigins = [
+  (process.env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, ''),
+  'http://localhost:3000',
+  'http://localhost:3001',
+];
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: (origin, cb) => {
+    // allow server-to-server requests (no origin) and listed origins
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    cb(new Error(`CORS: origin ${origin} not allowed`));
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));

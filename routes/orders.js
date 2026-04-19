@@ -4,7 +4,33 @@ const User = require('../models/User');
 const authMiddleware = require('../middleware/auth');
 const { sendOrderConfirmation, sendAdminNotification } = require('../utils/mailer');
 
-// Create order (called after successful Stripe payment)
+// ── Public guest order (WhatsApp checkout — no auth required) ──────
+router.post('/guest', async (req, res) => {
+  const { items, shippingAddress, currency, deliveryCharge = 0, notes } = req.body;
+  if (!items?.length) return res.status(400).json({ message: 'No items in order' });
+
+  const itemsTotal = {
+    GBP: items.reduce((s, i) => s + (i.priceGBP || 0) * i.qty, 0),
+    INR: items.reduce((s, i) => s + (i.priceINR || 0) * i.qty, 0),
+  };
+
+  const order = await Order.create({
+    items,
+    totalGBP: Math.round((itemsTotal.GBP + (currency === 'GBP' ? deliveryCharge : 0)) * 100) / 100,
+    totalINR: Math.round((itemsTotal.INR + (currency === 'INR' ? deliveryCharge : 0)) * 100) / 100,
+    currency,
+    shippingAddress,
+    deliveryCharge,
+    paymentStatus: 'pending',
+    orderSource: 'whatsapp',
+    status: 'pending',
+    notes: notes || '',
+  });
+
+  res.status(201).json({ orderId: order._id });
+});
+
+// ── Create order (Stripe payment — requires auth) ────────────────────
 router.post('/', authMiddleware, async (req, res) => {
   const { items, shippingAddress, currency, stripePaymentIntentId, saveAddress, notes } = req.body;
 
