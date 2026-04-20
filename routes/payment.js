@@ -1,7 +1,20 @@
-const router   = require('express').Router();
-const stripe   = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const Order    = require('../models/Order');
+const router          = require('express').Router();
+const stripe          = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const Order           = require('../models/Order');
+const jwt             = require('jsonwebtoken');
+const User            = require('../models/User');
 const { sendOrderConfirmation, sendAdminNotification } = require('../utils/mailer');
+
+// Optionally extract user from token (no error if not logged in)
+async function optionalUser(req) {
+  try {
+    const header = req.headers.authorization || '';
+    if (!header.startsWith('Bearer ')) return null;
+    const token = header.slice(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    return await User.findById(decoded.id).select('_id name email');
+  } catch { return null; }
+}
 
 // ── Create Payment Intent ─────────────────────────────────────────
 // Called by frontend when user clicks "Continue to Payment".
@@ -25,11 +38,15 @@ router.post('/create-intent', async (req, res) => {
     return res.status(400).json({ message: 'Invalid order amount' });
   }
 
+  // Attach order to user if logged in
+  const currentUser = await optionalUser(req);
+
   // Save order immediately with pending status so it is never lost
   let order = null;
   if (orderData && Array.isArray(orderData.items) && orderData.items.length > 0) {
     try {
       order = await Order.create({
+        ...(currentUser ? { user: currentUser._id } : {}),
         items: orderData.items,
         totalGBP: Number(orderData.totalGBP) || 0,
         totalINR: Number(orderData.totalINR) || 0,
@@ -43,7 +60,6 @@ router.post('/create-intent', async (req, res) => {
       });
     } catch (dbErr) {
       console.error('[Payment] Order pre-save failed:', dbErr.message);
-      // Still proceed — order will be saved by webhook fallback
     }
   }
 
@@ -95,6 +111,12 @@ router.post('/confirm-order', async (req, res) => {
     order.paymentStatus = isPaid ? 'paid' : 'pending';
     order.status        = isPaid ? 'confirmed' : 'pending';
     order.stripePaymentIntentId = paymentIntentId;
+    order.orderSource   = 'website';
+    // Attach user if not already set
+    if (!order.user) {
+      const currentUser = await optionalUser(req);
+      if (currentUser) order.user = currentUser._id;
+    }
     await order.save();
 
     if (isPaid) {
