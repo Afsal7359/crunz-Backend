@@ -1,10 +1,8 @@
 const router = require('express').Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const authMiddleware = require('../middleware/auth');
 
-// Create payment intent
-// amount should be in smallest currency unit: pence (GBP) or paise (INR)
-router.post('/create-intent', authMiddleware, async (req, res) => {
+// Create payment intent — no auth required
+router.post('/create-intent', async (req, res) => {
   const { amountGBP, amountINR, currency } = req.body;
 
   let amount, cur;
