@@ -67,6 +67,47 @@ router.post('/create-intent', async (req, res) => {
   });
 });
 
+// ── Confirm order after frontend payment success ──────────────────
+// Called immediately after stripe.confirmPayment() succeeds on frontend.
+// Verifies the payment with Stripe directly, then marks order paid.
+// This works even without webhook setup.
+router.post('/confirm-order', async (req, res) => {
+  const { paymentIntentId, orderId } = req.body;
+  if (!paymentIntentId) return res.status(400).json({ message: 'paymentIntentId required' });
+
+  // Fetch the intent directly from Stripe to verify it really succeeded
+  const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+  if (intent.status !== 'succeeded' && intent.status !== 'processing') {
+    return res.status(400).json({ message: `Payment not confirmed. Status: ${intent.status}` });
+  }
+
+  const isPaid = intent.status === 'succeeded';
+
+  // Find order by orderId or by stripePaymentIntentId
+  let order = null;
+  if (orderId) order = await Order.findById(orderId);
+  if (!order)  order = await Order.findOne({ stripePaymentIntentId: paymentIntentId });
+
+  if (!order) return res.status(404).json({ message: 'Order not found' });
+
+  if (order.paymentStatus !== 'paid') {
+    order.paymentStatus = isPaid ? 'paid' : 'pending';
+    order.status        = isPaid ? 'confirmed' : 'pending';
+    order.stripePaymentIntentId = paymentIntentId;
+    await order.save();
+
+    if (isPaid) {
+      sendAdminNotification(order).catch(() => {});
+      if (order.shippingAddress?.email) {
+        sendOrderConfirmation(order.shippingAddress.email, order, order.shippingAddress.name).catch(() => {});
+      }
+    }
+  }
+
+  res.json({ success: true, paymentStatus: order.paymentStatus, status: order.status });
+});
+
 // ── Stripe Webhook ────────────────────────────────────────────────
 // Stripe calls this URL automatically when payment succeeds, fails, etc.
 // Must use raw body (not JSON parsed) — registered before express.json() in server.js
