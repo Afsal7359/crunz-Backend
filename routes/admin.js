@@ -8,7 +8,7 @@ const SiteContent = require('../models/SiteContent');
 // Dashboard stats
 router.get('/dashboard', adminAuth, async (req, res) => {
   const [totalOrders, totalUsers, totalProducts, recentOrders, paidOrders] = await Promise.all([
-    Order.countDocuments(),
+    Order.countDocuments({ paymentStatus: 'paid' }),
     User.countDocuments(),
     Product.countDocuments(),
     Order.find().sort('-createdAt').limit(10).populate('user', 'name email'),
@@ -24,6 +24,39 @@ router.get('/dashboard', adminAuth, async (req, res) => {
   paidOrders.forEach(o => { if (statusCounts[o.status] !== undefined) statusCounts[o.status]++; });
 
   res.json({ totalOrders, totalUsers, totalProducts, revenueGBP, revenueINR, recentOrders, statusCounts });
+});
+
+// ── Transactions (all payments with status) ──────────────────────────
+router.get('/transactions', adminAuth, async (req, res) => {
+  const { filter = 'all', page = 1, limit = 30 } = req.query;
+  const query = {};
+  if (filter === 'paid')    query.paymentStatus = 'paid';
+  if (filter === 'pending') query.paymentStatus = 'pending';
+  if (filter === 'failed')  query.paymentStatus = 'failed';
+
+  const [transactions, total] = await Promise.all([
+    Order.find(query)
+      .populate('user', 'name email')
+      .sort('-createdAt')
+      .skip((page - 1) * Number(limit))
+      .limit(Number(limit))
+      .select('_id user shippingAddress totalGBP totalINR currency paymentStatus status orderSource stripePaymentIntentId createdAt items'),
+    Order.countDocuments(query),
+  ]);
+
+  const counts = await Promise.all([
+    Order.countDocuments({}),
+    Order.countDocuments({ paymentStatus: 'paid' }),
+    Order.countDocuments({ paymentStatus: 'pending' }),
+    Order.countDocuments({ paymentStatus: 'failed' }),
+  ]);
+
+  res.json({
+    transactions,
+    total,
+    pages: Math.ceil(total / Number(limit)),
+    counts: { all: counts[0], paid: counts[1], pending: counts[2], failed: counts[3] },
+  });
 });
 
 // All orders with filters + pagination

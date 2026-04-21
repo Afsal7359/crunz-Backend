@@ -60,6 +60,23 @@ app.use('/api/upload', require('./routes/upload'));
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
+// ── Auto-expire stale pending payments every 30 minutes ──────────────
+// Orders that are still 'pending' after 2 hours are marked failed/cancelled
+const Order = require('./models/Order');
+const EXPIRE_AFTER_MS = 2 * 60 * 60 * 1000; // 2 hours
+async function expireStalePendingOrders() {
+  const cutoff = new Date(Date.now() - EXPIRE_AFTER_MS);
+  const result = await Order.updateMany(
+    { paymentStatus: 'pending', createdAt: { $lt: cutoff } },
+    { paymentStatus: 'failed', status: 'cancelled' }
+  );
+  if (result.modifiedCount > 0) {
+    console.log(`[Auto-expire] Cancelled ${result.modifiedCount} stale pending order(s)`);
+  }
+}
+setInterval(expireStalePendingOrders, 30 * 60 * 1000); // run every 30 min
+expireStalePendingOrders(); // run once on startup too
+
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('[ERROR]', err.message);

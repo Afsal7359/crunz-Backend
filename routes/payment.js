@@ -63,10 +63,16 @@ router.post('/create-intent', async (req, res) => {
     }
   }
 
+  // For INR: explicitly include upi so it always appears
+  // For GBP: use automatic methods (card, Apple Pay, Google Pay)
+  const intentParams = cur === 'inr'
+    ? { payment_method_types: ['card', 'upi'] }
+    : { automatic_payment_methods: { enabled: true } };
+
   const paymentIntent = await stripe.paymentIntents.create({
     amount,
     currency: cur,
-    automatic_payment_methods: { enabled: true },
+    ...intentParams,
     metadata: { orderId: order ? order._id.toString() : '' },
   });
 
@@ -89,10 +95,12 @@ router.post('/create-intent', async (req, res) => {
 // This works even without webhook setup.
 router.post('/confirm-order', async (req, res) => {
   const { paymentIntentId, orderId } = req.body;
+  console.log('[confirm-order] paymentIntentId:', paymentIntentId, 'orderId:', orderId);
   if (!paymentIntentId) return res.status(400).json({ message: 'paymentIntentId required' });
 
   // Fetch the intent directly from Stripe to verify it really succeeded
   const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  console.log('[confirm-order] Stripe intent status:', intent.status);
 
   if (intent.status !== 'succeeded' && intent.status !== 'processing') {
     return res.status(400).json({ message: `Payment not confirmed. Status: ${intent.status}` });
@@ -121,8 +129,15 @@ router.post('/confirm-order', async (req, res) => {
 
     if (isPaid) {
       sendAdminNotification(order).catch(() => {});
-      if (order.shippingAddress?.email) {
-        sendOrderConfirmation(order.shippingAddress.email, order, order.shippingAddress.name).catch(() => {});
+      // Get customer email — from shippingAddress (guest) or from user account
+      let customerEmail = order.shippingAddress?.email || null;
+      let customerName  = order.shippingAddress?.name  || 'Customer';
+      if (!customerEmail && order.user) {
+        const userDoc = await User.findById(order.user).select('email name');
+        if (userDoc) { customerEmail = userDoc.email; customerName = userDoc.name; }
+      }
+      if (customerEmail) {
+        sendOrderConfirmation(customerEmail, order, customerName).catch(() => {});
       }
     }
   }
@@ -155,11 +170,16 @@ router.post('/webhook', async (req, res) => {
         order.paymentStatus = 'paid';
         order.status = 'confirmed';
         await order.save();
-        // Send confirmation email if we have customer email
-        if (order.shippingAddress?.email) {
-          sendOrderConfirmation(order.shippingAddress.email, order, order.shippingAddress.name).catch(() => {});
-        }
         sendAdminNotification(order).catch(() => {});
+        let customerEmail = order.shippingAddress?.email || null;
+        let customerName  = order.shippingAddress?.name  || 'Customer';
+        if (!customerEmail && order.user) {
+          const userDoc = await User.findById(order.user).select('email name');
+          if (userDoc) { customerEmail = userDoc.email; customerName = userDoc.name; }
+        }
+        if (customerEmail) {
+          sendOrderConfirmation(customerEmail, order, customerName).catch(() => {});
+        }
       }
     }
     console.log('[Webhook] Payment succeeded — order:', orderId);
