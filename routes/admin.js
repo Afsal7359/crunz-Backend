@@ -15,8 +15,8 @@ router.get('/dashboard', adminAuth, async (req, res) => {
     Order.find({ paymentStatus: 'paid' })
   ]);
 
-  const revenueGBP = paidOrders.reduce((s, o) => s + (o.totalGBP || 0), 0);
-  const revenueINR = paidOrders.reduce((s, o) => s + (o.totalINR || 0), 0);
+  const revenueGBP = paidOrders.filter(o => o.currency === 'GBP').reduce((s, o) => s + (o.totalGBP || 0), 0);
+  const revenueINR = paidOrders.filter(o => o.currency === 'INR').reduce((s, o) => s + (o.totalINR || 0), 0);
 
   const statusCounts = {
     pending: 0, confirmed: 0, processing: 0, shipped: 0, delivered: 0, cancelled: 0
