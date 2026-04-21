@@ -59,20 +59,30 @@ router.get('/transactions', adminAuth, async (req, res) => {
   });
 });
 
-// All orders with filters + pagination
+// All paid orders with filters + pagination
 router.get('/orders', adminAuth, async (req, res) => {
-  const { status, page = 1, limit = 20, search } = req.query;
-  const query = {};
+  const { status, page = 1, limit = 20 } = req.query;
+  const query = { paymentStatus: 'paid' };
   if (status) query.status = status;
 
-  const orders = await Order.find(query)
-    .populate('user', 'name email')
-    .sort('-createdAt')
-    .skip((page - 1) * Number(limit))
-    .limit(Number(limit));
+  const [orders, total, statusCounts] = await Promise.all([
+    Order.find(query)
+      .populate('user', 'name email')
+      .sort('-createdAt')
+      .skip((page - 1) * Number(limit))
+      .limit(Number(limit)),
+    Order.countDocuments(query),
+    Promise.all(
+      ['confirmed', 'processing', 'shipped', 'delivered', 'cancelled'].map(s =>
+        Order.countDocuments({ paymentStatus: 'paid', status: s }).then(c => ({ s, c }))
+      )
+    ),
+  ]);
 
-  const total = await Order.countDocuments(query);
-  res.json({ orders, total, pages: Math.ceil(total / Number(limit)) });
+  const counts = { all: await Order.countDocuments({ paymentStatus: 'paid' }) };
+  statusCounts.forEach(({ s, c }) => { counts[s] = c; });
+
+  res.json({ orders, total, pages: Math.ceil(total / Number(limit)), counts });
 });
 
 // Update order status
