@@ -31,7 +31,9 @@ const orderSchema = new mongoose.Schema({
   stripePaymentIntentId: String,
   paymentStatus: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
   orderSource: { type: String, enum: ['website', 'whatsapp'], default: 'website' },
-  deliveryCharge: { type: Number, default: 0 },
+  deliveryCharge:   { type: Number, default: 0 },
+  couponCode:       { type: String, default: '' },
+  discountAmount:   { type: Number, default: 0 },   // in order currency
   notes: String,
   createdAt: { type: Date, default: Date.now }
 });

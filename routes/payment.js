@@ -1,6 +1,7 @@
 const router          = require('express').Router();
 const stripe          = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const Order           = require('../models/Order');
+const Coupon          = require('../models/Coupon');
 const jwt             = require('jsonwebtoken');
 const User            = require('../models/User');
 const { sendOrderConfirmation, sendAdminNotification } = require('../utils/mailer');
@@ -21,7 +22,7 @@ async function optionalUser(req) {
 // We create the order in DB right here with paymentStatus:'pending'
 // so it is never lost, even if the user closes the tab mid-payment.
 router.post('/create-intent', async (req, res) => {
-  const { amountGBP, amountINR, currency, orderData } = req.body;
+  const { amountGBP, amountINR, currency, orderData, couponCode } = req.body;
 
   if (!currency) return res.status(400).json({ message: 'currency is required' });
 
@@ -54,6 +55,8 @@ router.post('/create-intent', async (req, res) => {
         shippingAddress: orderData.shippingAddress || {},
         deliveryCharge: Number(orderData.deliveryCharge) || 0,
         notes: orderData.notes || '',
+        couponCode: couponCode || '',
+        discountAmount: Number(orderData.discountAmount) || 0,
         paymentStatus: 'pending',
         status: 'pending',
         orderSource: 'website',
@@ -128,6 +131,13 @@ router.post('/confirm-order', async (req, res) => {
     await order.save();
 
     if (isPaid) {
+      // Increment coupon usage if one was applied
+      if (order.couponCode) {
+        await Coupon.findOneAndUpdate(
+          { code: order.couponCode },
+          { $inc: { usedCount: 1 } }
+        );
+      }
       sendAdminNotification(order).catch(() => {});
       // Get customer email — from shippingAddress (guest) or from user account
       let customerEmail = order.shippingAddress?.email || null;
@@ -170,6 +180,9 @@ router.post('/webhook', async (req, res) => {
         order.paymentStatus = 'paid';
         order.status = 'confirmed';
         await order.save();
+        if (order.couponCode) {
+          await Coupon.findOneAndUpdate({ code: order.couponCode }, { $inc: { usedCount: 1 } });
+        }
         sendAdminNotification(order).catch(() => {});
         let customerEmail = order.shippingAddress?.email || null;
         let customerName  = order.shippingAddress?.name  || 'Customer';

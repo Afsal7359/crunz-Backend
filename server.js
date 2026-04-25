@@ -54,8 +54,10 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/admin', require('./routes/admin'));
-app.use('/api/payment', require('./routes/payment'));
-app.use('/api/upload', require('./routes/upload'));
+app.use('/api/payment',   require('./routes/payment'));
+app.use('/api/upload',    require('./routes/upload'));
+app.use('/api/analytics', require('./routes/analytics'));
+app.use('/api/coupons',   require('./routes/coupons'));
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
