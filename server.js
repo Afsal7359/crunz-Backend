@@ -37,8 +37,11 @@ app.use('/api/payment/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Serve uploaded images
+// Serve uploaded files (images + videos)
 app.use('/uploads', express.static(uploadsDir));
+// Ensure videos sub-directory exists
+const videosDir = path.join(uploadsDir, 'videos');
+if (!fs.existsSync(videosDir)) fs.mkdirSync(videosDir, { recursive: true });
 
 // Public content endpoint (no auth required)
 const SiteContent = require('./models/SiteContent');
