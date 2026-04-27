@@ -56,4 +56,21 @@ router.post('/video', adminAuth, videoUpload.single('video'), (req, res) => {
   });
 });
 
+// ── Delete a video file by filename ──────────────────────────────────
+router.delete('/video/:filename', adminAuth, (req, res) => {
+  const { filename } = req.params;
+  // Only allow safe filenames — no path traversal
+  if (!filename || /[/\\]/.test(filename)) {
+    return res.status(400).json({ message: 'Invalid filename' });
+  }
+  const filePath = path.join(__dirname, '..', 'uploads', 'videos', filename);
+  if (!fs.existsSync(filePath)) {
+    return res.json({ message: 'File not found (already deleted)' });
+  }
+  fs.unlink(filePath, err => {
+    if (err) return res.status(500).json({ message: 'Failed to delete file' });
+    res.json({ message: 'Deleted' });
+  });
+});
+
 module.exports = router;
