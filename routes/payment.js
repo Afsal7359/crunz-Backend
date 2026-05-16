@@ -66,16 +66,11 @@ router.post('/create-intent', async (req, res) => {
     }
   }
 
-  // For INR: explicitly include upi so it always appears
-  // For GBP: use automatic methods (card, Apple Pay, Google Pay)
-  const intentParams = cur === 'inr'
-    ? { payment_method_types: ['card', 'upi'] }
-    : { automatic_payment_methods: { enabled: true } };
-
+  // Use automatic methods for all currencies — includes card, Apple Pay, Google Pay
   const paymentIntent = await stripe.paymentIntents.create({
     amount,
     currency: cur,
-    ...intentParams,
+    automatic_payment_methods: { enabled: true },
     metadata: { orderId: order ? order._id.toString() : '' },
   });
 
@@ -204,7 +199,7 @@ router.post('/webhook', async (req, res) => {
     console.log('[Webhook] Payment failed — order:', orderId);
 
   } else if (event.type === 'payment_intent.processing') {
-    // Bank transfer / UPI can stay processing for minutes
+    // Payment processing (bank transfers etc.)
     if (orderId) {
       await Order.findByIdAndUpdate(orderId, { paymentStatus: 'pending', status: 'pending' });
     }
