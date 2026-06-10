@@ -22,6 +22,8 @@ const allowedOrigins = [
   (process.env.CLIENT_URL || 'http://localhost:3000').replace(/\/$/, ''),
   'http://localhost:3000',
   'http://localhost:3001',
+  'https://getcrunz.com',
+  'https://www.getcrunz.com',
 ];
 app.use(cors({
   origin: (origin, cb) => {
@@ -66,21 +68,30 @@ app.use('/api/coupons',   require('./routes/coupons'));
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
 // ── Auto-expire stale pending payments every 30 minutes ──────────────
-// Orders that are still 'pending' after 2 hours are marked failed/cancelled
 const Order = require('./models/Order');
+const mongoose = require('mongoose');
 const EXPIRE_AFTER_MS = 2 * 60 * 60 * 1000; // 2 hours
+
 async function expireStalePendingOrders() {
-  const cutoff = new Date(Date.now() - EXPIRE_AFTER_MS);
-  const result = await Order.updateMany(
-    { paymentStatus: 'pending', createdAt: { $lt: cutoff } },
-    { paymentStatus: 'failed', status: 'cancelled' }
-  );
-  if (result.modifiedCount > 0) {
-    console.log(`[Auto-expire] Cancelled ${result.modifiedCount} stale pending order(s)`);
+  try {
+    const cutoff = new Date(Date.now() - EXPIRE_AFTER_MS);
+    const result = await Order.updateMany(
+      { paymentStatus: 'pending', createdAt: { $lt: cutoff } },
+      { paymentStatus: 'failed', status: 'cancelled' }
+    );
+    if (result.modifiedCount > 0) {
+      console.log(`[Auto-expire] Cancelled ${result.modifiedCount} stale pending order(s)`);
+    }
+  } catch (err) {
+    console.error('[Auto-expire] Error:', err.message);
   }
 }
-setInterval(expireStalePendingOrders, 30 * 60 * 1000); // run every 30 min
-expireStalePendingOrders(); // run once on startup too
+
+// Wait for DB connection before running the first expire check
+mongoose.connection.once('connected', () => {
+  expireStalePendingOrders();
+  setInterval(expireStalePendingOrders, 30 * 60 * 1000);
+});
 
 // Global error handler
 app.use((err, req, res, next) => {
