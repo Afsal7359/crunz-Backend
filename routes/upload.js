@@ -3,6 +3,15 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const adminAuth = require('../middleware/adminAuth');
+const { v2: cloudinary } = require('cloudinary');
+
+if (process.env.CLOUDINARY_CLOUD_NAME) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key:    process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+}
 
 function diskStorage(subdir = '') {
   return multer.diskStorage({
@@ -71,6 +80,22 @@ router.delete('/video/:filename', adminAuth, (req, res) => {
     if (err) return res.status(500).json({ message: 'Failed to delete file' });
     res.json({ message: 'Deleted' });
   });
+});
+
+// ── Delete a Cloudinary asset by public_id ────────────────────────────
+router.delete('/cloudinary', adminAuth, async (req, res) => {
+  const { publicId } = req.body;
+  if (!publicId) return res.status(400).json({ message: 'publicId is required' });
+
+  if (!process.env.CLOUDINARY_CLOUD_NAME) {
+    return res.status(501).json({ message: 'Cloudinary not configured on server' });
+  }
+
+  const result = await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
+  if (result.result === 'ok' || result.result === 'not found') {
+    return res.json({ message: 'Deleted', result: result.result });
+  }
+  res.status(500).json({ message: 'Cloudinary deletion failed', result: result.result });
 });
 
 module.exports = router;
