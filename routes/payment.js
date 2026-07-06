@@ -134,12 +134,16 @@ router.post('/confirm-order', async (req, res) => {
         );
       }
       sendAdminNotification(order).catch(() => {});
-      // Get customer email — from shippingAddress (guest) or from user account
-      let customerEmail = order.shippingAddress?.email || null;
-      let customerName  = order.shippingAddress?.name  || 'Customer';
-      if (!customerEmail && order.user) {
+      // Send confirmation to whoever has an email — logged-in user account takes priority,
+      // fall back to the email the guest typed in the checkout form
+      let customerEmail = null;
+      let customerName  = order.shippingAddress?.name || 'Customer';
+      if (order.user) {
         const userDoc = await User.findById(order.user).select('email name');
-        if (userDoc) { customerEmail = userDoc.email; customerName = userDoc.name; }
+        if (userDoc?.email) { customerEmail = userDoc.email; customerName = userDoc.name || customerName; }
+      }
+      if (!customerEmail && order.shippingAddress?.email) {
+        customerEmail = order.shippingAddress.email;
       }
       if (customerEmail) {
         sendOrderConfirmation(customerEmail, order, customerName).catch(() => {});
@@ -179,11 +183,14 @@ router.post('/webhook', async (req, res) => {
           await Coupon.findOneAndUpdate({ code: order.couponCode }, { $inc: { usedCount: 1 } });
         }
         sendAdminNotification(order).catch(() => {});
-        let customerEmail = order.shippingAddress?.email || null;
-        let customerName  = order.shippingAddress?.name  || 'Customer';
-        if (!customerEmail && order.user) {
+        let customerEmail = null;
+        let customerName  = order.shippingAddress?.name || 'Customer';
+        if (order.user) {
           const userDoc = await User.findById(order.user).select('email name');
-          if (userDoc) { customerEmail = userDoc.email; customerName = userDoc.name; }
+          if (userDoc?.email) { customerEmail = userDoc.email; customerName = userDoc.name || customerName; }
+        }
+        if (!customerEmail && order.shippingAddress?.email) {
+          customerEmail = order.shippingAddress.email;
         }
         if (customerEmail) {
           sendOrderConfirmation(customerEmail, order, customerName).catch(() => {});
