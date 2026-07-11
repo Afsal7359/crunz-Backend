@@ -2,9 +2,9 @@ const router = require('express').Router();
 const Product = require('../models/Product');
 const adminAuth = require('../middleware/adminAuth');
 
-// Public: all in-stock products
+// Public: all products (including out-of-stock — frontend shows OOS badge)
 router.get('/', async (req, res) => {
-  const products = await Product.find({ inStock: true }).sort('order');
+  const products = await Product.find().sort('order');
   res.json(products);
 });
 
